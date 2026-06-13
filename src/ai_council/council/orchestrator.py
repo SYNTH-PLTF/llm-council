@@ -19,7 +19,7 @@ import random
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Protocol
 
 from pydantic import BaseModel, Field
 
@@ -76,6 +76,17 @@ class RunResult(BaseModel):
     stages: list[StageTrace] = Field(default_factory=list)
 
 
+class RunStore(Protocol):
+    async def save_run(
+        self,
+        *,
+        result: RunResult,
+        query: str,
+        proposer_outputs: list[ProposerOutput] | None = None,
+        conversation_id: str | None = None,
+    ) -> str: ...
+
+
 @dataclass
 class _Ledger:
     stages: list[StageTrace] = field(default_factory=list)
@@ -93,6 +104,7 @@ class _Progress:
     ranking: RankingResult | None = None
     verdict: ChairmanVerdict | None = None
     proposer_models: list[str] = field(default_factory=list)
+    proposer_outputs: list[ProposerOutput] = field(default_factory=list)
     disagreement: float = 0.0
     degraded: bool = False
 
@@ -107,6 +119,7 @@ class Orchestrator:
         ranker: Ranker | None = None,
         chairman: Chairman | None = None,
         guardrail: Guardrail | None = None,
+        store: RunStore | None = None,
         proposer_prompt: str | None = None,
         rng: random.Random | None = None,
         clock: Callable[[], float] = time.monotonic,
@@ -118,6 +131,7 @@ class Orchestrator:
         self._ranker = ranker if ranker is not None else Ranker(config, gateway, rng=self._rng)
         self._chairman = chairman if chairman is not None else Chairman(config, gateway)
         self._guardrail = guardrail
+        self._store = store
         self._proposer_prompt = proposer_prompt
         self._clock = clock
 
@@ -145,6 +159,15 @@ class Orchestrator:
         result.cost_usd = costs.total
         result.latency_ms = (self._clock() - started) * 1000.0
         result.stages = ledger.stages
+        if self._store is not None:
+            try:
+                await self._store.save_run(
+                    result=result,
+                    query=ctx.query,
+                    proposer_outputs=progress.proposer_outputs,
+                )
+            except Exception as exc:
+                log.error("orchestrator.persist_failed", error=str(exc))
         return result
 
     async def _pipeline(self, ctx: RunContext, ledger: _Ledger, progress: _Progress) -> RunResult:
@@ -202,6 +225,7 @@ class Orchestrator:
         stage1 = await run_stage1(self._gateway, self._config, self._messages(ctx))
         progress.degraded = stage1.degraded
         progress.proposer_models = [o.model for o in stage1.round.outputs]
+        progress.proposer_outputs = list(stage1.round.outputs)
         ledger.add(
             "proposers",
             {

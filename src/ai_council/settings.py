@@ -50,6 +50,7 @@ class ModelSpec(BaseModel):
     litellm_provider: str = "openai"
     context_window: int = 200_000
     tier: Literal["frontier", "mid", "cheap"] = "mid"
+    fallback: str | None = None
 
 
 class RouterRules(BaseModel):

@@ -7,6 +7,12 @@ from ai_council.council.chairman import (
     stream_text,
 )
 from ai_council.council.debate import DebateResult, run_debate, should_debate
+from ai_council.council.orchestrator import (
+    Orchestrator,
+    RunContext,
+    RunResult,
+    StageTrace,
+)
 from ai_council.council.proposers import (
     ProposalRound,
     ProposerOutput,
@@ -24,11 +30,15 @@ __all__ = [
     "ChairmanError",
     "ChairmanVerdict",
     "DebateResult",
+    "Orchestrator",
     "ProposalRound",
     "ProposerOutput",
     "Ranker",
     "RankingResult",
+    "RunContext",
+    "RunResult",
     "Stage1Result",
+    "StageTrace",
     "VoteResult",
     "build_proposer_messages",
     "extract_answer",

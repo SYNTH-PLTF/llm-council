@@ -1,6 +1,11 @@
 """LLM gateway: the single boundary between the app and any model provider."""
 
-from ai_council.gateway.client import CircuitBreaker, LLMGateway, classify_error
+from ai_council.gateway.client import (
+    CircuitBreaker,
+    LLMGateway,
+    classify_error,
+    cost_capture,
+)
 from ai_council.gateway.models import (
     AllAttemptsFailed,
     ChatMessage,
@@ -24,4 +29,5 @@ __all__ = [
     "TransientError",
     "Usage",
     "classify_error",
+    "cost_capture",
 ]

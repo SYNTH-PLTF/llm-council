@@ -21,6 +21,7 @@ import os
 import random
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
+from contextvars import ContextVar, Token
 from typing import Any, Literal
 
 from ai_council.gateway.models import (
@@ -41,6 +42,34 @@ log = get_logger("gateway")
 CompletionFn = Callable[..., Awaitable[Any]]
 SleepFn = Callable[[float], Awaitable[None]]
 Clock = Callable[[], float]
+
+_run_cost: ContextVar[list[float] | None] = ContextVar("ai_council_run_cost", default=None)
+
+
+class cost_capture:
+    """Accumulate the cost_usd of every gateway call made in this async context.
+
+    Works across asyncio.gather and asyncio.wait_for: child tasks copy the
+    context and share the same accumulator list, so concurrent stage calls all
+    add into one per-run total.
+    """
+
+    def __init__(self) -> None:
+        self._token: Token[list[float] | None] | None = None
+        self.costs: list[float] = []
+
+    def __enter__(self) -> cost_capture:
+        self._token = _run_cost.set(self.costs)
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        if self._token is not None:
+            _run_cost.reset(self._token)
+
+    @property
+    def total(self) -> float:
+        return sum(self.costs)
+
 
 _TRANSIENT_NAMES = {
     "RateLimitError",
@@ -262,12 +291,16 @@ class LLMGateway:
             latency_ms = (self._clock() - started) * 1000.0
             text, finish, usage = _extract(resp)
             breaker.record_success()
+            cost = self._cost(model, usage)
+            sink = _run_cost.get()
+            if sink is not None:
+                sink.append(cost)
             return ProviderResult(
                 model=model,
                 text=text,
                 finish_reason=finish,
                 usage=usage,
-                cost_usd=self._cost(model, usage),
+                cost_usd=cost,
                 latency_ms=latency_ms,
                 attempts=attempt,
                 used_fallback=is_fallback,

@@ -40,6 +40,10 @@ src = ["src", "tests"]
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "C4", "SIM", "ASYNC", "RUF"]
 
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI uses callables in argument defaults by design.
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Path", "fastapi.Header"]
+
 [tool.pyright]
 include = ["src", "tests"]
 exclude = ["**/__pycache__", ".venv", "frontend"]

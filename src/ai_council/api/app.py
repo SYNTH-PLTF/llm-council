@@ -1,18 +1,22 @@
-"""FastAPI application: lifespan, correlation-id middleware, health/readiness.
+"""FastAPI application: lifespan, correlation-id middleware, health + chat.
 
-Business routes (/v1/chat, ...) are added in later phases. Phase 0 ships only
-liveness (/healthz) and readiness (/readyz, which proves the config loads).
+The lifespan builds one shared Orchestrator (config + gateway) and stores it on
+app.state so routes can reach it. Tests can set app.state.orchestrator directly.
 """
 
 from __future__ import annotations
 
 import uuid
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
 
 from ai_council import __version__
+from ai_council.api.routes import router as api_router
+from ai_council.council.orchestrator import Orchestrator
+from ai_council.gateway.client import LLMGateway
 from ai_council.settings import get_config, get_settings
 from ai_council.telemetry.logging import (
     bind_correlation_id,
@@ -24,16 +28,26 @@ from ai_council.telemetry.logging import (
 log = get_logger("api")
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    config = get_config()
+    gateway = LLMGateway(config)
+    app.state.orchestrator = Orchestrator(config, gateway)
+    log.info("app.ready", proposers=len(config.council.proposers))
+    yield
+
+
 def create_app() -> FastAPI:
     settings = get_settings()
     configure_logging(settings.log_level, settings.log_json)
-    app = FastAPI(title="AI Council", version=__version__)
+    app = FastAPI(title="AI Council", version=__version__, lifespan=lifespan)
 
     @app.middleware("http")
     async def _correlation_id(
         request: Request, call_next: Callable[[Request], Awaitable[Response]]
     ) -> Response:
         cid = request.headers.get("X-Correlation-ID") or uuid.uuid4().hex
+        request.state.correlation_id = cid
         bind_correlation_id(cid)
         log.info("request.start", method=request.method, path=request.url.path)
         try:
@@ -59,6 +73,7 @@ def create_app() -> FastAPI:
             )
         return JSONResponse({"status": "ready", "proposers": proposers})
 
+    app.include_router(api_router)
     return app
 
 

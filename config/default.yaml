@@ -1,0 +1,123 @@
+# =====================================================================
+# AI Council - PRODUCTION policy (frontier pool).
+# This file is the contract: business logic reads everything from here.
+# Verify model strings, context windows, and prices against the provider
+# before relying on them. Pricing is 0.0 until filled (cost calc warns).
+# =====================================================================
+
+models:
+  claude-opus-4-8:
+    env_prefix: CLAUDE_OPUS_4_8
+    litellm_provider: openai
+    context_window: 1000000
+    tier: frontier
+  claude-sonnet-4-6:
+    env_prefix: CLAUDE_SONNET_4_6
+    litellm_provider: openai
+    context_window: 1000000
+    tier: mid
+  gpt-5.4:
+    env_prefix: GPT_5_4
+    litellm_provider: openai
+    context_window: 400000
+    tier: frontier
+  gpt-5-codex:
+    env_prefix: GPT_5_CODEX
+    litellm_provider: openai
+    context_window: 400000
+    tier: frontier
+  gpt-chat-latest:
+    env_prefix: GPT_CHAT_LATEST
+    litellm_provider: openai
+    context_window: 128000
+    tier: mid
+  grok-4.3:
+    env_prefix: GROK_4_3
+    litellm_provider: openai
+    context_window: 256000
+    tier: frontier
+  DeepSeek-V4-Pro:
+    env_prefix: DEEPSEEK_V4_PRO
+    litellm_provider: openai
+    context_window: 128000
+    tier: cheap
+  Kimi-K2.6:
+    env_prefix: KIMI_K2_6
+    litellm_provider: openai
+    context_window: 256000
+    tier: cheap
+
+gateway:
+  provider: openai_compatible
+  request_timeout_s: 45
+  max_retries: 2
+  backoff_base_s: 0.5
+  circuit_breaker:
+    fail_threshold: 5
+    reset_after_s: 30
+
+router:
+  router_model: claude-sonnet-4-6
+  default_decision: single_model
+  rules:
+    force_single_if_tokens_lt: 12
+    force_council_on_user_flag: true
+  budgets:
+    per_request_usd: 0.50
+    per_user_daily_usd: 20.0
+    latency_budget_s: 30
+
+council:
+  # Comparable-quality, genuinely diverse (three labs). Do not add a weak model.
+  proposers:
+    - claude-opus-4-8
+    - gpt-5.4
+    - grok-4.3
+  quorum: 2
+  judges: proposers
+  ranking:
+    method: borda
+    orderings_per_judge: 2
+    anonymize: true
+  debate:
+    enabled: true
+    threshold: 0.4
+    max_rounds: 1
+  voting:
+    enabled: true
+    tie_break_by_quality_order: true
+  chairman:
+    model: claude-opus-4-8   # large context for synthesis
+    structured_output: true
+    max_output_tokens: 2048
+
+class_routing:
+  trivial: single_model
+  standard: single_model
+  high_stakes: council
+  verifiable_reasoning: council_with_voting
+
+cache:
+  exact_match: true
+  semantic: false
+  ttl_s: 86400
+
+guardrails:
+  safety_check: true
+  pii_scan: true
+  verify_faithfulness: true
+
+observability:
+  langfuse: false
+  otel: false
+  prometheus_metrics: true
+
+pricing_usd_per_1k_tokens:
+  claude-opus-4-8: { input: 0.0, output: 0.0 }     # FILL IN
+  claude-sonnet-4-6: { input: 0.0, output: 0.0 }   # FILL IN
+  gpt-5.4: { input: 0.0, output: 0.0 }             # FILL IN
+  gpt-5-codex: { input: 0.0, output: 0.0 }         # FILL IN
+  gpt-chat-latest: { input: 0.0, output: 0.0 }     # FILL IN
+  grok-4.3: { input: 0.0, output: 0.0 }            # FILL IN
+  DeepSeek-V4-Pro: { input: 0.0, output: 0.0 }     # FILL IN
+  Kimi-K2.6: { input: 0.0, output: 0.0 }           # FILL IN

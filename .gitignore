@@ -1,0 +1,46 @@
+# Secrets and environment (NEVER commit real secrets)
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+secrets/
+config/secrets/
+# Guard against copying the user's key folder into the repo
+API_key/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.pyright/
+.mypy_cache/
+.coverage
+coverage.xml
+htmlcov/
+dist/
+build/
+
+# Node / frontend
+node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Data and logs (local infra volumes)
+*.log
+*.sqlite
+*.sqlite3
+data/
+postgres-data/
+redis-data/
+langfuse-data/
+
+# OS / editor
+.DS_Store
+*.swp
+.idea/
+.vscode/

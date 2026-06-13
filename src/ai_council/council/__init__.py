@@ -1,5 +1,11 @@
 """Council stages: proposers, ranking, debate, voting, chairman, orchestrator."""
 
+from ai_council.council.chairman import (
+    Chairman,
+    ChairmanError,
+    ChairmanVerdict,
+    stream_text,
+)
 from ai_council.council.debate import DebateResult, run_debate, should_debate
 from ai_council.council.proposers import (
     ProposalRound,
@@ -14,6 +20,9 @@ from ai_council.council.voting import VoteResult, extract_answer, majority_vote
 
 __all__ = [
     "Candidate",
+    "Chairman",
+    "ChairmanError",
+    "ChairmanVerdict",
     "DebateResult",
     "ProposalRound",
     "ProposerOutput",
@@ -28,4 +37,5 @@ __all__ = [
     "run_debate",
     "run_stage1",
     "should_debate",
+    "stream_text",
 ]

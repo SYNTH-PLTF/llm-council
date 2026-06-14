@@ -1,4 +1,4 @@
-.PHONY: setup dev lint fmt types test test-cov check eval clean
+.PHONY: setup dev lint fmt types test test-cov check eval load up clean
 
 setup:
 	uv sync
@@ -25,6 +25,12 @@ check: lint types test
 
 eval:
 	uv run python -m ai_council.evals.run
+
+load:
+	uv run locust -f tests/load/locustfile.py --host http://localhost:8000
+
+up:
+	docker compose up --build
 
 clean:
 	rm -rf .pytest_cache .ruff_cache .coverage htmlcov dist build

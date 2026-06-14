@@ -1,0 +1,51 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+      - run: uv python install 3.12
+      - run: uv sync --frozen
+      - name: lint
+        run: uv run ruff check .
+      - name: types
+        run: uv run pyright
+      - name: tests (incl. eval uplift + regression gate)
+        run: uv run pytest -q
+      - name: dependency audit (non-blocking)
+        run: uvx pip-audit || true
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm ci
+      - name: types
+        run: npx tsc --noEmit
+      - name: tests
+        run: npm run test
+
+  images:
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    steps:
+      - uses: actions/checkout@v4
+      - name: build api image
+        run: docker build -t ai-council-api .
+      - name: build frontend image
+        run: docker build -t ai-council-frontend ./frontend

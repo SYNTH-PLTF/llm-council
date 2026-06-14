@@ -42,6 +42,9 @@ def _to_response(result: RunResult) -> ChatResponse:
         timeout_partial=result.timeout_partial,
         cost_usd=result.cost_usd,
         latency_ms=result.latency_ms,
+        flags=result.flags,
+        stages=[stage.name for stage in result.stages],
+        proposer_models=result.proposer_models,
     )
 
 

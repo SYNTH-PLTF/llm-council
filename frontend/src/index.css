@@ -1,0 +1,131 @@
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+.app {
+  max-width: 820px;
+  margin: 2rem auto;
+  padding: 0 1rem;
+  line-height: 1.5;
+}
+
+.tagline {
+  opacity: 0.7;
+  margin-top: -0.5rem;
+}
+
+textarea {
+  width: 100%;
+  font: inherit;
+  padding: 0.5rem;
+  box-sizing: border-box;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin: 0.5rem 0 1.5rem;
+}
+
+button {
+  padding: 0.4rem 1rem;
+  font: inherit;
+  cursor: pointer;
+}
+
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.badge {
+  display: inline-flex;
+  gap: 0.4rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  background: rgba(127, 127, 127, 0.15);
+  font-size: 0.85rem;
+}
+
+.badge-label {
+  opacity: 0.6;
+}
+
+.badge-council .badge-value {
+  color: #7c3aed;
+  font-weight: 600;
+}
+
+.badge-single .badge-value {
+  color: #0891b2;
+  font-weight: 600;
+}
+
+.badge-warn {
+  background: rgba(220, 100, 0, 0.2);
+}
+
+.flags {
+  color: #b45309;
+  margin-bottom: 0.75rem;
+}
+
+.stages {
+  display: flex;
+  gap: 0.35rem;
+  margin-bottom: 1rem;
+}
+
+.stage-pill {
+  font-size: 0.75rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 4px;
+  background: rgba(127, 127, 127, 0.12);
+}
+
+.proposer-tabs {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.proposer-chip {
+  padding: 0.25rem 0.6rem;
+  border: 1px solid rgba(127, 127, 127, 0.4);
+  border-radius: 6px;
+  font-size: 0.85rem;
+}
+
+.disagreement {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 1rem 0;
+}
+
+.bar {
+  flex: 1;
+  height: 8px;
+  background: rgba(127, 127, 127, 0.2);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.bar-fill {
+  height: 100%;
+  background: #f59e0b;
+}
+
+.dissent p {
+  border-left: 3px solid #f59e0b;
+  padding-left: 0.75rem;
+  opacity: 0.85;
+}
+
+.error {
+  color: #dc2626;
+}

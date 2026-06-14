@@ -24,3 +24,6 @@ class ChatResponse(BaseModel):
     timeout_partial: bool
     cost_usd: float
     latency_ms: float
+    flags: list[str] = []
+    stages: list[str] = []
+    proposer_models: list[str] = []

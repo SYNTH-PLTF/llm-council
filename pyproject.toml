@@ -16,6 +16,7 @@ dependencies = [
     "asyncpg>=0.31.0",
     "aiosqlite>=0.22.1",
     "alembic>=1.18.4",
+    "prometheus-client>=0.25.0",
 ]
 
 [dependency-groups]
@@ -51,7 +52,12 @@ extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Path", "f
 
 [tool.pyright]
 include = ["src", "tests"]
-exclude = ["**/__pycache__", ".venv", "frontend"]
+exclude = [
+    "**/__pycache__",
+    ".venv",
+    "frontend",
+    "src/ai_council/observability/adapters.py",
+]
 pythonVersion = "3.11"
 typeCheckingMode = "standard"
 venvPath = "."

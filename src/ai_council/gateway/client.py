@@ -34,6 +34,8 @@ from ai_council.gateway.models import (
     TransientError,
     Usage,
 )
+from ai_council.observability.metrics import record_llm_call
+from ai_council.observability.tracing import span
 from ai_council.settings import AppConfig, ModelSpec
 from ai_council.telemetry.logging import get_logger
 
@@ -220,23 +222,26 @@ class LLMGateway:
                 log.warning("gateway.circuit_open", model=name)
                 continue
             any_allowed = True
-            try:
-                return await self._attempt(
-                    name,
-                    cand_spec,
-                    breaker,
-                    messages,
-                    is_fallback,
-                    max_tokens=max_tokens,
-                    temperature=temperature,
-                    response_format=response_format,
-                    timeout_s=timeout_s,
-                )
-            except NonRetryableError:
-                raise
-            except _Exhausted as exc:
-                last_exc = exc.last
-                continue
+            with span("llm", model=name) as sp:
+                try:
+                    result = await self._attempt(
+                        name,
+                        cand_spec,
+                        breaker,
+                        messages,
+                        is_fallback,
+                        max_tokens=max_tokens,
+                        temperature=temperature,
+                        response_format=response_format,
+                        timeout_s=timeout_s,
+                    )
+                    sp.set(cost_usd=result.cost_usd, tokens=result.usage.total_tokens)
+                    return result
+                except NonRetryableError:
+                    raise
+                except _Exhausted as exc:
+                    last_exc = exc.last
+            continue
         if not any_allowed:
             raise CircuitOpenError(f"circuit open for '{model}' and fallback")
         raise AllAttemptsFailed(f"all attempts failed for '{model}'", last_error=last_exc)
@@ -278,6 +283,7 @@ class LLMGateway:
                 )
             except Exception as exc:
                 if classify_error(exc) == "fatal":
+                    record_llm_call(model, "error_4xx")
                     raise NonRetryableError(
                         str(exc), status_code=getattr(exc, "status_code", None)
                     ) from exc
@@ -287,6 +293,7 @@ class LLMGateway:
                     log.info("gateway.retry", model=model, attempt=attempt)
                     continue
                 breaker.record_failure()
+                record_llm_call(model, "error")
                 raise _Exhausted(exc) from exc
             latency_ms = (self._clock() - started) * 1000.0
             text, finish, usage = _extract(resp)
@@ -295,6 +302,13 @@ class LLMGateway:
             sink = _run_cost.get()
             if sink is not None:
                 sink.append(cost)
+            record_llm_call(
+                model,
+                "ok",
+                prompt_tokens=usage.prompt_tokens,
+                completion_tokens=usage.completion_tokens,
+                cost_usd=cost,
+            )
             return ProviderResult(
                 model=model,
                 text=text,

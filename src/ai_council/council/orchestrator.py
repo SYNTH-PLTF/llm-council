@@ -17,7 +17,8 @@ import asyncio
 import inspect
 import random
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
@@ -30,6 +31,8 @@ from ai_council.council.ranking import Candidate, Ranker, RankingResult
 from ai_council.council.voting import VoteResult, majority_vote
 from ai_council.gateway.client import LLMGateway, cost_capture
 from ai_council.gateway.models import ChatMessage, GatewayError
+from ai_council.observability.metrics import record_request, record_stage
+from ai_council.observability.tracing import NoopTracer, Tracer, span, use_tracer
 from ai_council.router.triage import LLMRouter, Router, RouteRequest, TriageResult
 from ai_council.settings import AppConfig
 from ai_council.telemetry.logging import get_logger
@@ -40,6 +43,16 @@ Guardrail = Callable[[str], "str | Awaitable[str]"]
 
 _TOP_K = 3
 _SINGLE_MAX_TOKENS = 1024
+
+
+@contextmanager
+def _traced_stage(name: str) -> Iterator[None]:
+    start = time.monotonic()
+    with span(name):
+        try:
+            yield
+        finally:
+            record_stage(name, time.monotonic() - start)
 
 
 @dataclass(frozen=True)
@@ -120,6 +133,7 @@ class Orchestrator:
         chairman: Chairman | None = None,
         guardrail: Guardrail | None = None,
         store: RunStore | None = None,
+        tracer: Tracer | None = None,
         proposer_prompt: str | None = None,
         rng: random.Random | None = None,
         clock: Callable[[], float] = time.monotonic,
@@ -132,6 +146,7 @@ class Orchestrator:
         self._chairman = chairman if chairman is not None else Chairman(config, gateway)
         self._guardrail = guardrail
         self._store = store
+        self._tracer = tracer if tracer is not None else NoopTracer()
         self._proposer_prompt = proposer_prompt
         self._clock = clock
 
@@ -140,7 +155,11 @@ class Orchestrator:
         progress = _Progress()
         started = self._clock()
         budget_s = self._config.router.budgets.latency_budget_s
-        with cost_capture() as costs:
+        with (
+            cost_capture() as costs,
+            use_tracer(self._tracer),
+            span("request", correlation_id=ctx.correlation_id),
+        ):
             try:
                 if budget_s and budget_s > 0:
                     result = await asyncio.wait_for(
@@ -159,6 +178,7 @@ class Orchestrator:
         result.cost_usd = costs.total
         result.latency_ms = (self._clock() - started) * 1000.0
         result.stages = ledger.stages
+        record_request(result.decision, result.latency_ms / 1000.0)
         if self._store is not None:
             try:
                 await self._store.save_run(
@@ -171,15 +191,16 @@ class Orchestrator:
         return result
 
     async def _pipeline(self, ctx: RunContext, ledger: _Ledger, progress: _Progress) -> RunResult:
-        triage = await self._router.route(
-            RouteRequest(
-                query=ctx.query,
-                force_council=ctx.force_council,
-                force_single=ctx.force_single,
-                budget_remaining_usd=ctx.request_budget_usd,
-                user_daily_remaining_usd=ctx.user_daily_remaining_usd,
+        with _traced_stage("triage"):
+            triage = await self._router.route(
+                RouteRequest(
+                    query=ctx.query,
+                    force_council=ctx.force_council,
+                    force_single=ctx.force_single,
+                    budget_remaining_usd=ctx.request_budget_usd,
+                    user_daily_remaining_usd=ctx.user_daily_remaining_usd,
+                )
             )
-        )
         ledger.add(
             "triage",
             {
@@ -203,9 +224,10 @@ class Orchestrator:
         progress.proposer_models = [model]
         final = ""
         try:
-            res = await self._gateway.complete(
-                model, self._messages(ctx), max_tokens=_SINGLE_MAX_TOKENS, temperature=0.2
-            )
+            with _traced_stage("single_model"):
+                res = await self._gateway.complete(
+                    model, self._messages(ctx), max_tokens=_SINGLE_MAX_TOKENS, temperature=0.2
+                )
             final = res.text
         except GatewayError as exc:
             ledger.add("single_error", {"error": str(exc)})
@@ -222,7 +244,8 @@ class Orchestrator:
     async def _run_council(
         self, ctx: RunContext, triage: TriageResult, ledger: _Ledger, progress: _Progress
     ) -> RunResult:
-        stage1 = await run_stage1(self._gateway, self._config, self._messages(ctx))
+        with _traced_stage("proposers"):
+            stage1 = await run_stage1(self._gateway, self._config, self._messages(ctx))
         progress.degraded = stage1.degraded
         progress.proposer_models = [o.model for o in stage1.round.outputs]
         progress.proposer_outputs = list(stage1.round.outputs)
@@ -269,7 +292,8 @@ class Orchestrator:
                 proposer_models=progress.proposer_models,
             )
 
-        ranking = await self._ranker.rank(ctx.query, candidates)
+        with _traced_stage("ranking"):
+            ranking = await self._ranker.rank(ctx.query, candidates)
         progress.ranking = ranking
         progress.disagreement = ranking.disagreement
         ledger.add("ranking", {"ordering": ranking.ordering, "disagreement": ranking.disagreement})
@@ -296,7 +320,8 @@ class Orchestrator:
             ledger.add("debate", {"rounds": debate.rounds, "converged": debate.converged})
 
         top = self._top_candidates(candidates, ranking)
-        verdict = await self._chairman.synthesize(ctx.query, top)
+        with _traced_stage("chairman"):
+            verdict = await self._chairman.synthesize(ctx.query, top)
         progress.verdict = verdict
         ledger.add("chairman", {"confidence": verdict.confidence})
         return RunResult(

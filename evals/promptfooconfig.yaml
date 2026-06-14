@@ -1,0 +1,50 @@
+# promptfoo eval: council vs single-best on the labeled datasets.
+# Run with: npx promptfoo eval -c evals/promptfooconfig.yaml  (API must be up: make dev)
+# Wire this into CI so a PR that regresses quality-per-dollar fails the gate.
+description: AI Council vs single-best
+
+providers:
+  - id: https
+    label: council
+    config:
+      url: http://localhost:8000/v1/chat
+      method: POST
+      headers:
+        Content-Type: application/json
+      body:
+        query: "{{query}}"
+        force_council: true
+      transformResponse: json.final_answer
+  - id: https
+    label: single
+    config:
+      url: http://localhost:8000/v1/chat
+      method: POST
+      headers:
+        Content-Type: application/json
+      body:
+        query: "{{query}}"
+        force_single: true
+      transformResponse: json.final_answer
+
+tests:
+  - vars:
+      query: "What is 17 multiplied by 23? Answer with just the number."
+    assert:
+      - type: contains
+        value: "391"
+  - vars:
+      query: "A train travels 60 km in 45 minutes. What is its speed in km/h? Answer with just the number."
+    assert:
+      - type: contains
+        value: "80"
+  - vars:
+      query: "Should a mid-size SaaS company migrate its monolith to microservices now or wait, and why?"
+    assert:
+      - type: llm-rubric
+        value: "Gives a nuanced, conditional answer (depends on team size, scaling pain, maturity) rather than a blanket yes or no."
+
+defaultTest:
+  options:
+    # Debias the pairwise judge by averaging both orders.
+    provider: openai:gpt-4o-mini

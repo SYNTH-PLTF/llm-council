@@ -1,0 +1,12 @@
+[
+  {
+    "query": "Should a mid-size SaaS company migrate its monolith to microservices now or wait, and why?",
+    "query_class": "high_stakes",
+    "reference": "It depends on team size, scaling pain, and operational maturity; migrate incrementally only once the monolith is a proven bottleneck, not preemptively."
+  },
+  {
+    "query": "What are the main tradeoffs between renting and buying a home in a high interest rate environment?",
+    "query_class": "high_stakes",
+    "reference": "Buying builds equity but ties up capital and adds risk when rates are high; renting preserves flexibility and liquidity. The right choice depends on horizon and local price-to-rent ratios."
+  }
+]

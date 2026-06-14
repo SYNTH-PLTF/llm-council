@@ -24,7 +24,7 @@ test-cov:
 check: lint types test
 
 eval:
-	@echo "eval harness lands in Phase 11"
+	uv run python -m ai_council.evals.run
 
 clean:
 	rm -rf .pytest_cache .ruff_cache .coverage htmlcov dist build

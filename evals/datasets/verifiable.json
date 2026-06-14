@@ -1,0 +1,12 @@
+[
+  {
+    "query": "What is 17 multiplied by 23? Answer with just the number.",
+    "query_class": "verifiable_reasoning",
+    "reference": "391"
+  },
+  {
+    "query": "A train travels 60 km in 45 minutes. What is its speed in km/h? Answer with just the number.",
+    "query_class": "verifiable_reasoning",
+    "reference": "80"
+  }
+]

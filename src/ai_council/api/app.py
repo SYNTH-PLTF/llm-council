@@ -6,6 +6,7 @@ app.state so routes can reach it. Tests can set app.state.orchestrator directly.
 
 from __future__ import annotations
 
+import os
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
@@ -15,6 +16,7 @@ from fastapi.responses import JSONResponse
 
 from ai_council import __version__
 from ai_council.api.routes import router as api_router
+from ai_council.cache.redis_cache import RedisCache, make_redis
 from ai_council.council.orchestrator import Orchestrator
 from ai_council.gateway.client import LLMGateway
 from ai_council.observability.metrics import render
@@ -33,12 +35,15 @@ log = get_logger("api")
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     config = get_config()
-    gateway = LLMGateway(config)
+    redis_url = os.environ.get("REDIS_URL")
+    cache = RedisCache(make_redis(redis_url)) if redis_url else None
+    gateway = LLMGateway(config, cache=cache)
     tracer = make_tracer(
         langfuse=config.observability.langfuse, otel=config.observability.otel
     )
+    app.state.cache = cache
     app.state.orchestrator = Orchestrator(config, gateway, tracer=tracer)
-    log.info("app.ready", proposers=len(config.council.proposers))
+    log.info("app.ready", proposers=len(config.council.proposers), cache=cache is not None)
     yield
 
 

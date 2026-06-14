@@ -29,7 +29,7 @@ from ai_council.council.debate import run_debate, should_debate
 from ai_council.council.proposers import ProposerOutput, run_stage1
 from ai_council.council.ranking import Candidate, Ranker, RankingResult
 from ai_council.council.voting import VoteResult, majority_vote
-from ai_council.gateway.client import LLMGateway, cost_capture
+from ai_council.gateway.client import LLMGateway, cost_capture, current_run_cost
 from ai_council.gateway.models import ChatMessage, GatewayError
 from ai_council.observability.metrics import record_request, record_stage
 from ai_council.observability.tracing import NoopTracer, Tracer, span, use_tracer
@@ -320,6 +320,18 @@ class Orchestrator:
             ledger.add("debate", {"rounds": debate.rounds, "converged": debate.converged})
 
         top = self._top_candidates(candidates, ranking)
+        if self._over_budget(ctx):
+            log.warning("orchestrator.budget_capped", correlation_id=ctx.correlation_id)
+            ledger.add("budget_capped", {"spent_usd": current_run_cost()})
+            return RunResult(
+                query_class=triage.query_class,
+                requested_decision=triage.decision,
+                decision="council",
+                final_answer=top[0].text if top else "",
+                disagreement=ranking.disagreement,
+                degraded=True,
+                proposer_models=progress.proposer_models,
+            )
         with _traced_stage("chairman"):
             verdict = await self._chairman.synthesize(ctx.query, top)
         progress.verdict = verdict
@@ -347,6 +359,9 @@ class Orchestrator:
     def _best_model(self) -> str:
         proposers = self._config.council.proposers
         return proposers[0] if proposers else self._config.router.router_model
+
+    def _over_budget(self, ctx: RunContext) -> bool:
+        return ctx.request_budget_usd is not None and current_run_cost() >= ctx.request_budget_usd
 
     def _top_candidates(
         self, candidates: list[Candidate], ranking: RankingResult

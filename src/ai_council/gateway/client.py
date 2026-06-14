@@ -24,6 +24,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from contextvars import ContextVar, Token
 from typing import Any, Literal
 
+from ai_council.cache.redis_cache import RedisCache
 from ai_council.gateway.models import (
     AllAttemptsFailed,
     ChatMessage,
@@ -71,6 +72,11 @@ class cost_capture:
     @property
     def total(self) -> float:
         return sum(self.costs)
+
+
+def current_run_cost() -> float:
+    sink = _run_cost.get()
+    return sum(sink) if sink is not None else 0.0
 
 
 _TRANSIENT_NAMES = {
@@ -160,11 +166,13 @@ class LLMGateway:
         *,
         completion_fn: CompletionFn | None = None,
         sleep_fn: SleepFn | None = None,
+        cache: RedisCache | None = None,
         clock: Clock = time.monotonic,
     ) -> None:
         self._config = config
         self._completion = completion_fn or _litellm_acompletion
         self._sleep = sleep_fn or asyncio.sleep
+        self._cache = cache
         self._clock = clock
         self._cb_cfg = config.gateway.circuit_breaker
         self._breakers: dict[str, CircuitBreaker] = {}
@@ -210,6 +218,12 @@ class LLMGateway:
         timeout_s: float | None = None,
     ) -> ProviderResult:
         spec = self._config.require_model(model)
+        cache_params = {"max_tokens": max_tokens, "temperature": temperature}
+        cache_prompt = _messages_repr(messages)
+        if self._cache is not None and self._config.cache.exact_match:
+            hit = await self._cache.get_exact(model, cache_prompt, cache_params)
+            if hit is not None:
+                return ProviderResult(model=model, text=hit, from_cache=True)
         candidates: list[tuple[str, ModelSpec, bool]] = [(model, spec, False)]
         if spec.fallback:
             candidates.append((spec.fallback, self._config.require_model(spec.fallback), True))
@@ -236,6 +250,10 @@ class LLMGateway:
                         timeout_s=timeout_s,
                     )
                     sp.set(cost_usd=result.cost_usd, tokens=result.usage.total_tokens)
+                    if self._cache is not None and self._config.cache.exact_match:
+                        await self._cache.set_exact(
+                            model, cache_prompt, cache_params, result.text
+                        )
                     return result
                 except NonRetryableError:
                     raise
@@ -344,6 +362,10 @@ class LLMGateway:
             piece = _extract_delta(chunk)
             if piece:
                 yield piece
+
+
+def _messages_repr(messages: list[ChatMessage]) -> str:
+    return repr([(m.role, m.content) for m in messages])
 
 
 def _extract(resp: Any) -> tuple[str, str | None, Usage]:

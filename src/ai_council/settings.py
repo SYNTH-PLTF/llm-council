@@ -130,6 +130,11 @@ class ObservabilityConfig(BaseModel):
     prometheus_metrics: bool = True
 
 
+class RateLimitConfig(BaseModel):
+    requests_per_second: float = 5.0
+    burst: int = 20
+
+
 class ModelPricing(BaseModel):
     input: float = 0.0
     output: float = 0.0
@@ -146,6 +151,7 @@ class AppConfig(BaseModel):
     cache: CacheConfig = Field(default_factory=CacheConfig)
     guardrails: GuardrailsConfig = Field(default_factory=GuardrailsConfig)
     observability: ObservabilityConfig = Field(default_factory=ObservabilityConfig)
+    rate_limit: RateLimitConfig = Field(default_factory=RateLimitConfig)
     pricing_usd_per_1k_tokens: dict[str, ModelPricing] = Field(default_factory=dict)
 
     def require_model(self, name: str) -> ModelSpec:

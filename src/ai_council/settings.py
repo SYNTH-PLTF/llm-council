@@ -174,6 +174,9 @@ class AppSettings(BaseSettings):
     log_level: str = "INFO"
     log_json: bool = True
     api_auth_token: str | None = None
+    cors_origins: list[str] = Field(
+        default_factory=lambda: ["http://localhost:5173", "http://localhost:3000"]
+    )
 
 
 @functools.lru_cache

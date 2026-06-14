@@ -8,6 +8,7 @@ from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
+from ai_council.api.auth import require_api_key
 from ai_council.api.schemas import ChatRequest, ChatResponse
 from ai_council.cache.redis_cache import RedisCache
 from ai_council.council.orchestrator import Orchestrator, RunContext, RunResult
@@ -50,6 +51,7 @@ async def chat(
     request: Request,
     orchestrator: Orchestrator = Depends(get_orchestrator),
     cache: RedisCache | None = Depends(get_cache),
+    _api_key: str = Depends(require_api_key),
 ) -> ChatResponse:
     config = get_config()
     api_key = request.headers.get("X-API-Key", "anonymous")

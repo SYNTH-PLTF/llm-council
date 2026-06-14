@@ -31,6 +31,8 @@ from ai_council.council.ranking import Candidate, Ranker, RankingResult
 from ai_council.council.voting import VoteResult, majority_vote
 from ai_council.gateway.client import LLMGateway, cost_capture, current_run_cost
 from ai_council.gateway.models import ChatMessage, GatewayError
+from ai_council.guardrails import safety as safety_guard
+from ai_council.guardrails import verify as verify_guard
 from ai_council.observability.metrics import record_request, record_stage
 from ai_council.observability.tracing import NoopTracer, Tracer, span, use_tracer
 from ai_council.router.triage import LLMRouter, Router, RouteRequest, TriageResult
@@ -86,6 +88,7 @@ class RunResult(BaseModel):
     cost_usd: float = 0.0
     latency_ms: float = 0.0
     proposer_models: list[str] = Field(default_factory=list)
+    flags: list[str] = Field(default_factory=list)
     stages: list[StageTrace] = Field(default_factory=list)
 
 
@@ -178,6 +181,7 @@ class Orchestrator:
         result.cost_usd = costs.total
         result.latency_ms = (self._clock() - started) * 1000.0
         result.stages = ledger.stages
+        self._guardrail_flags(result, progress)
         record_request(result.decision, result.latency_ms / 1000.0)
         if self._store is not None:
             try:
@@ -359,6 +363,23 @@ class Orchestrator:
     def _best_model(self) -> str:
         proposers = self._config.council.proposers
         return proposers[0] if proposers else self._config.router.router_model
+
+    def _guardrail_flags(self, result: RunResult, progress: _Progress) -> None:
+        guards = self._config.guardrails
+        flags: list[str] = []
+        if guards.safety_check or guards.pii_scan:
+            report = safety_guard.evaluate(
+                result.final_answer, pii_scan=guards.pii_scan, safety=guards.safety_check
+            )
+            flags.extend(f"pii:{name}" for name in report.pii)
+            flags.extend(f"safety:{reason}" for reason in report.reasons)
+        if guards.verify_faithfulness and progress.candidates:
+            sources = [c.text for c in progress.candidates]
+            if not verify_guard.is_faithful(result.final_answer, sources):
+                flags.append("unfaithful")
+        if flags:
+            log.warning("orchestrator.guardrail_flags", flags=flags)
+        result.flags = flags
 
     def _over_budget(self, ctx: RunContext) -> bool:
         return ctx.request_budget_usd is not None and current_run_cost() >= ctx.request_budget_usd

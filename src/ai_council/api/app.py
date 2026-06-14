@@ -12,6 +12,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, Response
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from ai_council import __version__
@@ -51,6 +52,13 @@ def create_app() -> FastAPI:
     settings = get_settings()
     configure_logging(settings.log_level, settings.log_json)
     app = FastAPI(title="AI Council", version=__version__, lifespan=lifespan)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origins,
+        allow_credentials=True,
+        allow_methods=["GET", "POST"],
+        allow_headers=["*"],
+    )
 
     @app.middleware("http")
     async def _correlation_id(
@@ -65,6 +73,9 @@ def create_app() -> FastAPI:
         finally:
             clear_correlation_id()
         response.headers["X-Correlation-ID"] = cid
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "no-referrer"
         return response
 
     @app.get("/healthz")

@@ -30,6 +30,11 @@ node_modules/
 frontend/dist/
 frontend/.vite/
 
+# Amplify (generated, never commit)
+amplify_outputs.json
+.amplify/
+amplifyconfiguration.json
+
 # Data and logs (local infra volumes)
 *.log
 *.sqlite

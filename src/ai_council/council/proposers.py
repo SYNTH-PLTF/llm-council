@@ -109,8 +109,14 @@ async def gather_proposals(
                 ProposerOutput(model=name, ok=False, error=str(res) or type(res).__name__)
             )
             log.warning("council.proposer_failed", model=name, error=str(res))
-        else:
+        elif res.text and res.text.strip():
             outputs.append(_success_output(name, res))
+        else:
+            # A successful HTTP call that returns empty/whitespace content is NOT
+            # a usable proposal. Count it as a failure so quorum and graceful
+            # degradation work, instead of letting a blank draft pass as success.
+            outputs.append(ProposerOutput(model=name, ok=False, error="empty response"))
+            log.warning("council.proposer_empty", model=name)
     rnd = ProposalRound(outputs=outputs, quorum=quorum)
     if not rnd.met:
         log.warning("council.below_quorum", successes=len(rnd.successes), quorum=quorum)
